@@ -1,2 +1,0 @@
-pystray>=0.19.4
-pillow>=9.0.0
