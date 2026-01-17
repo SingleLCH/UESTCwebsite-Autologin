@@ -342,16 +342,53 @@ def toggle_startup():
 
 def create_tray_menu():
     """创建托盘菜单"""
-    startup_status = get_startup_status()
-    startup_text = "开机自启: 已开启" if startup_status else "开机自启: 已关闭"
-    
-    return pystray.Menu(
-        item('显示状态', show_status),
-        item('调试登录', debug_login),
-        item(startup_text, toggle_startup),
-        pystray.Menu.SEPARATOR,
-        item('退出程序', quit_app)
-    )
+    try:
+        logger.info("开始创建托盘菜单...")
+        startup_status = get_startup_status()
+        startup_text = "开机自启: 已开启" if startup_status else "开机自启: 已关闭"
+        logger.info(f"开机自启状态: {startup_status}, 菜单文本: {startup_text}")
+        
+        # 使用默认参数确保lambda正确捕获函数引用
+        def make_callback(func, func_name):
+            def callback(icon, item):
+                try:
+                    logger.info(f"菜单项被点击: {func_name}")
+                    func()
+                except Exception as e:
+                    logger.error(f"执行菜单项 {func_name} 时出错: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+            return callback
+        
+        # 创建菜单项列表
+        logger.info("创建菜单项...")
+        menu_items = [
+            item('显示状态', make_callback(show_status, '显示状态')),
+            item('调试登录', make_callback(debug_login, '调试登录')),
+            item(startup_text, make_callback(toggle_startup, '开机自启')),
+            pystray.Menu.SEPARATOR,
+            item('退出程序', make_callback(quit_app, '退出程序'))
+        ]
+        
+        logger.info(f"托盘菜单创建成功，包含 {len(menu_items)} 个菜单项")
+        for i, menu_item in enumerate(menu_items):
+            if hasattr(menu_item, 'text'):
+                logger.info(f"  菜单项 {i+1}: {menu_item.text}")
+            elif menu_item == pystray.Menu.SEPARATOR:
+                logger.info(f"  菜单项 {i+1}: 分隔符")
+        
+        return pystray.Menu(*menu_items)
+    except Exception as e:
+        logger.error(f"创建托盘菜单失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        print(f"警告: 创建托盘菜单时出错: {e}")
+        # 返回一个基本的菜单作为兜底
+        return pystray.Menu(
+            item('显示状态', lambda icon, item: show_status()),
+            item('调试登录', lambda icon, item: debug_login()),
+            item('退出程序', lambda icon, item: quit_app())
+        )
 
 def always_login(user=None, test_ip=None, delay=2, max_failed=3, **kwargs):
     """网络监控和自动登录主循环"""
@@ -395,10 +432,14 @@ def always_login(user=None, test_ip=None, delay=2, max_failed=3, **kwargs):
 def run_tray():
     """运行托盘图标"""
     try:
+        logger.info("开始创建托盘图标...")
         # 创建初始图标
         image = create_image('orange')  # 启动时橙色
+        logger.info("创建托盘菜单...")
         menu = create_tray_menu()
+        logger.info("托盘菜单创建完成")
         
+        logger.info("创建托盘图标对象...")
         app_status.tray_icon = pystray.Icon(
             "uestc_login",
             image,
@@ -406,20 +447,38 @@ def run_tray():
             menu
         )
         
+        logger.info("托盘图标已创建，开始运行...")
+        print("托盘图标已启动！请查看系统托盘（任务栏右下角）")
+        print("如果看不到图标，请点击任务栏的向上箭头展开隐藏的图标")
         app_status.tray_icon.run()
     except Exception as e:
         logger.error(f"托盘图标启动失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         print(f"托盘图标启动失败: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
     try:
+        logger.info("程序启动，正在加载配置...")
         login_options = get_login_options()
+        logger.info("配置加载完成，启动网络监控线程...")
+        
         # 启动网络监控线程
         monitor_thread = threading.Thread(target=lambda: always_login(**login_options), daemon=True)
         monitor_thread.start()
+        logger.info("网络监控线程已启动")
         
         # 在主线程运行托盘图标
+        logger.info("正在启动托盘图标...")
+        print("程序已启动，请查看系统托盘图标（右下角任务栏）")
+        print("右键点击托盘图标可以看到菜单选项：")
+        print("  - 显示状态")
+        print("  - 调试登录")
+        print("  - 开机自启: 已开启/已关闭")
+        print("  - 退出程序")
         run_tray()
         
     except KeyboardInterrupt:
@@ -430,6 +489,8 @@ if __name__ == "__main__":
         error = traceback.format_exc()
         logger.error(f"程序运行错误: {error}")
         print(f"程序运行错误: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         app_status.running = False
         if app_status.tray_icon:

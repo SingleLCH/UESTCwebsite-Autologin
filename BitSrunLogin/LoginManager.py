@@ -71,15 +71,39 @@ class LoginManager:
         self.get_login_responce()
 
     def get_ip(self):
-        print("Step1: Get local ip returned from srun server.")
-        self._get_login_page()
-        self._resolve_ip_from_login_page()
+        print("Step1: Get local ip.")
+        # 不使用HTML解析，直接通过socket获取本机IP
+        # 注意：这个IP可能和服务器看到的IP不一致，会在获取challenge时更新
+        try:
+            import socket
+            # 方法1: 连接到外部地址以获取本机IP（不实际发送数据）
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                # 连接到外部地址（不实际连接，只是获取本机IP）
+                s.connect(('8.8.8.8', 80))
+                self.ip = s.getsockname()[0]
+            except Exception:
+                # 方法2: 如果失败，尝试获取主机名对应的IP
+                try:
+                    hostname = socket.gethostname()
+                    self.ip = socket.gethostbyname(hostname)
+                except Exception:
+                    # 方法3: 如果都失败，使用默认IP
+                    self.ip = '127.0.0.1'
+            finally:
+                s.close()
+        except Exception:
+            # 如果socket方法失败，使用默认IP
+            self.ip = '127.0.0.1'
+        print(f"Initial IP (may be updated by server): {self.ip}")
         print("----------------")
 
     def get_token(self):
         print("Step2: Get token by resolving challenge result.")
         self._get_challenge()
         self._resolve_token_from_challenge_response()
+        # 在获取token后，IP可能已经被更新为服务器返回的IP
+        print(f"Current IP for signature: {self.ip}")
         print("----------------")
 
     def get_login_responce(self):
@@ -155,6 +179,15 @@ class LoginManager:
         if not match:
             raise ValueError(f"无法从challenge响应中解析token。响应内容: {self._challenge_response.text[:200]}")
         self.token = match.group(1)
+        
+        # 尝试从challenge响应中提取服务器返回的IP（如果存在）
+        # 服务器可能返回client_ip，我们应该使用服务器看到的IP
+        ip_match = re.search('"client_ip":"(.*?)"', self._challenge_response.text)
+        if ip_match:
+            server_ip = ip_match.group(1)
+            if server_ip and server_ip != self.ip:
+                print(f"服务器返回的IP ({server_ip}) 与本机IP ({self.ip}) 不一致，使用服务器IP")
+                self.ip = server_ip
 
     @checkip
     def _generate_info(self):
@@ -250,6 +283,16 @@ class LoginManager:
             raise ValueError(f"无法从登录响应中解析结果。响应内容: {self._login_responce.text[:200]}")
         self._login_result = match.group(1)
         print(self._login_responce.text)
+        
+        # 如果出现sign_error，检查是否是IP不匹配导致的
+        # 如果响应中包含client_ip且与当前IP不一致，说明需要重新使用服务器IP登录
+        if self._login_result == "sign_error":
+            ip_match = re.search('"client_ip":"(.*?)"', self._login_responce.text)
+            if ip_match:
+                server_ip = ip_match.group(1)
+                if server_ip and server_ip != self.ip:
+                    print(f"检测到sign_error，服务器IP ({server_ip}) 与本机IP ({self.ip}) 不一致")
+                    print(f"提示：请确保使用服务器返回的IP地址进行签名计算")
 
 
 if __name__ == '__mian__':
