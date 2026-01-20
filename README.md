@@ -59,18 +59,11 @@ python always_online.py
 ## 开源文件说明
 
 ```
-├── always_online.py      # 主程序（托盘版）
-├── login_once.py         # 单次登录脚本
+├── always_online.py      # 主程序
 ├── config.py             # 配置管理
 ├── logger.py             # 日志模块
-├── BitSrunLogin/         # 登录核心模块
-│   ├── LoginManager.py   # 登录管理器
-│   ├── encryption/       # 加密算法
-│   └── _decorators.py    # 装饰器
-├── logs/                 # 日志目录
-├── user_config.json      # 用户配置文件（自动生成）
-├── build.bat             # 打包脚本
-└── always_online.spec    # PyInstaller 配置
+├── BitSrunLogin        # 登录核心模块
+└── user_config.json      # 用户配置文件（自动生成）
 ```
 
 ## 故障排除
